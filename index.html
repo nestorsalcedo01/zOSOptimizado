@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plataforma de Herramientas de Optimización IBM z/OS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Modern Tech Light -->
+    <!-- Application Structure Plan: Redesigned from a single-page scroll to a simulated Multi-Page Application (MPA) within one HTML file. This addresses the user's request for a "decoupled" feel. Navigation is handled by JS, showing/hiding full-screen sections ('pages') for Home, dedicated tool deep-dives, Workflow, and Comparison. This architecture provides a more organized, in-depth exploration of each tool, improving information hierarchy and user focus compared to the previous long-scroll format. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Overall tool ecosystem -> Goal: Organize & Navigate -> Viz: Homepage with interactive lifecycle cards linking to dedicated pages (HTML/CSS) -> Interaction: Click to navigate to a new "page" view -> Justification: Provides a clear, central hub for exploration.
+        - Report Info: Individual tool details -> Goal: Inform in-depth -> Viz: Dedicated "pages" for each tool category with tabbed content (HTML/CSS/JS) -> Interaction: Click tabs for "Features", "Use Cases" -> Justification: Progressive disclosure on dedicated pages prevents information overload and allows for deep dives.
+        - Report Info: Workflow example -> Goal: Explain Process -> Viz: Dedicated page with an animated step-by-step visual flow (HTML/CSS) -> Interaction: Static visual with hover effects -> Justification: Focuses user attention on the synergy between tools.
+        - Report Info: Tool comparison matrix -> Goal: Compare -> Viz: Dedicated page with interactive Radar Chart (Chart.js/Canvas) -> Interaction: Select tools from dropdowns to update chart -> Justification: Creates a powerful, focused comparison tool.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            color: #1e293b;
+        }
+        .page {
+            display: none;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        .page.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .nav-link {
+            position: relative;
+            transition: color 0.3s;
+        }
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 2px;
+            bottom: -4px;
+            left: 50%;
+            background-color: #2563eb;
+            transition: width 0.3s, left 0.3s;
+        }
+        .nav-link.active, .nav-link:hover {
+            color: #2563eb;
+        }
+        .nav-link.active::after, .nav-link:hover::after {
+            width: 100%;
+            left: 0;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 500px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 500px;
+            }
+        }
+        .tab-button {
+            transition: all 0.3s;
+        }
+        .tab-button.active {
+            background-color: #2563eb;
+            color: white;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <header class="bg-white/80 sticky top-0 z-50 backdrop-blur-lg border-b border-slate-200">
+        <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <a href="#home" class="text-2xl font-extrabold text-slate-800">
+                IBM z/OS <span class="text-blue-600">Optimize</span>
+            </a>
+            <div class="hidden md:flex items-center space-x-8 font-semibold text-slate-600">
+                <a href="#home" class="nav-link">Inicio</a>
+                <div class="relative group">
+                    <button class="nav-link flex items-center">Herramientas 
+                        <span class="ml-1 mt-1 transform transition-transform group-hover:rotate-180">&#9662;</span>
+                    </button>
+                    <div class="absolute hidden group-hover:block bg-white shadow-lg rounded-md mt-2 py-2 w-60 border border-slate-200">
+                        <a href="#tool-develop" class="block px-4 py-2 text-slate-700 hover:bg-blue-50">💻 Desarrollar y Optimizar</a>
+                        <a href="#tool-diagnose" class="block px-4 py-2 text-slate-700 hover:bg-blue-50">🔬 Diagnosticar y Analizar</a>
+                        <a href="#tool-monitor" class="block px-4 py-2 text-slate-700 hover:bg-blue-50">📈 Monitorizar y Alertar</a>
+                        <a href="#tool-strategize" class="block px-4 py-2 text-slate-700 hover:bg-blue-50">🧠 Estrategizar y Prevenir</a>
+                    </div>
+                </div>
+                <a href="#workflow" class="nav-link">Flujo de Trabajo</a>
+                <a href="#comparison" class="nav-link">Comparativa</a>
+            </div>
+            <button id="mobile-menu-button" class="md:hidden text-slate-800 text-2xl">☰</button>
+        </nav>
+        <div id="mobile-menu" class="hidden md:hidden bg-white border-t border-slate-200">
+            <a href="#home" class="block py-2 px-6 text-slate-700 hover:bg-blue-50">Inicio</a>
+            <a href="#tool-develop" class="block py-2 px-6 text-slate-700 hover:bg-blue-50">Desarrollar y Optimizar</a>
+            <a href="#tool-diagnose" class="block py-2 px-6 text-slate-700 hover:bg-blue-50">Diagnosticar y Analizar</a>
+            <a href="#tool-monitor" class="block py-2 px-6 text-slate-700 hover:bg-blue-50">Monitorizar y Alertar</a>
+            <a href="#tool-strategize" class="block py-2 px-6 text-slate-700 hover:bg-blue-50">Estrategizar y Prevenir</a>
+            <a href="#workflow" class="block py-2 px-6 text-slate-700 hover:bg-blue-50">Flujo de Trabajo</a>
+            <a href="#comparison" class="block py-2 px-6 text-slate-700 hover:bg-blue-50">Comparativa</a>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-6 py-12">
+
+        <!-- Página de Inicio -->
+        <section id="page-home" class="page">
+            <div class="text-center">
+                <h1 class="text-4xl md:text-6xl font-extrabold text-slate-800 mb-4">Ecosistema de Optimización de IBM z/OS</h1>
+                <p class="max-w-3xl mx-auto text-lg text-slate-600 mb-12">
+                    Una plataforma interactiva para explorar el conjunto de herramientas que garantizan el máximo rendimiento, eficiencia y fiabilidad en el mainframe. Descubra la solución adecuada para cada fase del ciclo de vida de la optimización.
+                </p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <a href="#tool-develop" class="group block bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-shadow duration-300 border border-slate-200 text-center">
+                    <div class="text-5xl mb-4 transform group-hover:scale-110 transition-transform">💻</div>
+                    <h3 class="text-2xl font-bold mb-2 text-slate-800">Desarrollar y Optimizar</h3>
+                    <p class="text-slate-600">Integre la optimización del rendimiento directamente en el ciclo de desarrollo.</p>
+                </a>
+                <a href="#tool-diagnose" class="group block bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-shadow duration-300 border border-slate-200 text-center">
+                    <div class="text-5xl mb-4 transform group-hover:scale-110 transition-transform">🔬</div>
+                    <h3 class="text-2xl font-bold mb-2 text-slate-800">Diagnosticar y Analizar</h3>
+                    <p class="text-slate-600">Identifique la causa raíz de los problemas de rendimiento a nivel de aplicación.</p>
+                </a>
+                <a href="#tool-monitor" class="group block bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-shadow duration-300 border border-slate-200 text-center">
+                    <div class="text-5xl mb-4 transform group-hover:scale-110 transition-transform">📈</div>
+                    <h3 class="text-2xl font-bold mb-2 text-slate-800">Monitorizar y Alertar</h3>
+                    <p class="text-slate-600">Vigile la salud del sistema en tiempo real y responda proactivamente.</p>
+                </a>
+                <a href="#tool-strategize" class="group block bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-shadow duration-300 border border-slate-200 text-center">
+                    <div class="text-5xl mb-4 transform group-hover:scale-110 transition-transform">🧠</div>
+                    <h3 class="text-2xl font-bold mb-2 text-slate-800">Estrategizar y Prevenir</h3>
+                    <p class="text-slate-600">Utilice AIOps para la planificación a largo plazo y la prevención de incidentes.</p>
+                </a>
+            </div>
+        </section>
+
+        <!-- Página de Herramientas: Desarrollar -->
+        <section id="page-tool-develop" class="page">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl font-extrabold text-slate-800">💻 Desarrollar y Optimizar</h2>
+                <p class="text-lg text-slate-600 mt-2">Previniendo ineficiencias desde la primera línea de código.</p>
+            </div>
+            <div class="bg-white p-8 rounded-2xl shadow-lg border border-slate-200">
+                <h3 class="text-2xl font-bold mb-2">watsonx Code Assistant for Z</h3>
+                <p class="mb-6 text-slate-600">Optimización de código COBOL impulsada por IA directamente en el IDE del desarrollador.</p>
+                <div id="tabs-develop" class="tool-tabs-container">
+                    <div class="flex border-b border-slate-200 mb-6">
+                        <button data-tab="features-dev" class="tab-button px-6 py-3 font-semibold text-slate-600 active">Características Clave</button>
+                        <button data-tab="use-cases-dev" class="tab-button px-6 py-3 font-semibold text-slate-600">Casos de Uso</button>
+                    </div>
+                    <div data-content="features-dev" class="tab-content active">
+                        <ul class="list-disc list-inside space-y-3 text-slate-700">
+                            <li><strong>Análisis en Tiempo de Ejecución:</strong> Identifica ineficiencias que solo se manifiestan con datos reales, a diferencia del análisis estático.</li>
+                            <li><strong>Recomendaciones Priorizadas:</strong> Clasifica los problemas de rendimiento por impacto, permitiendo a los desarrolladores centrarse en las mejoras más significativas.</li>
+                            <li><strong>Integración con VS Code:</strong> La extensión "Z Code Optimization Advice" integra el análisis de rendimiento directamente en el flujo de trabajo del desarrollador.</li>
+                            <li><strong>Sugerencias a Nivel de Sentencia:</strong> Ofrece una visión detallada del rendimiento de cada sentencia COBOL individual para una sintonización hipergranular.</li>
+                        </ul>
+                    </div>
+                    <div data-content="use-cases-dev" class="tab-content">
+                        <p class="text-slate-700">Ideal para modernizar aplicaciones COBOL heredadas, reducir el consumo de CPU de programas batch críticos y educar a la nueva generación de desarrolladores en las mejores prácticas de rendimiento de mainframe.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Página de Herramientas: Diagnosticar -->
+        <section id="page-tool-diagnose" class="page">
+             <div class="text-center mb-12">
+                <h2 class="text-4xl font-extrabold text-slate-800">🔬 Diagnosticar y Analizar</h2>
+                <p class="text-lg text-slate-600 mt-2">Encontrando la causa raíz con precisión quirúrgica.</p>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="bg-white p-8 rounded-2xl shadow-lg border border-slate-200">
+                    <h3 class="text-2xl font-bold mb-2">Application Performance Analyzer (APA)</h3>
+                    <p class="mb-4 text-slate-600">Diagnóstico para aplicaciones en ejecución con impacto mínimo.</p>
+                    <ul class="list-disc list-inside space-y-2 text-slate-700">
+                        <li><strong>Mapeo del Programa Fuente:</strong> Correlaciona el rendimiento directamente con las líneas de código exactas.</li>
+                        <li><strong>Análisis No Intrusivo:</strong> Utiliza muestreo estadístico para minimizar el overhead.</li>
+                        <li><strong>Soporte Amplio:</strong> Compatible con CICS, Db2, IMS, Batch y múltiples lenguajes.</li>
+                    </ul>
+                </div>
+                <div class="bg-white p-8 rounded-2xl shadow-lg border border-slate-200">
+                    <h3 class="text-2xl font-bold mb-2">CICS Performance Analyzer (PA)</h3>
+                    <p class="mb-4 text-slate-600">Análisis histórico profundo de transacciones CICS.</p>
+                    <ul class="list-disc list-inside space-y-2 text-slate-700">
+                        <li><strong>Informes Exhaustivos:</strong> Más de 250 informes predefinidos para análisis detallado.</li>
+                        <li><strong>Base de Datos Histórica (HDB):</strong> Permite el análisis de tendencias a largo plazo y la gestión de SLAs.</li>
+                        <li><strong>Perfil de Transacción:</strong> Compara el rendimiento antes y después de un cambio para validar mejoras.</li>
+                    </ul>
+                </div>
+                <div class="bg-white p-8 rounded-2xl shadow-lg border border-slate-200 lg:col-span-2">
+                    <h3 class="text-2xl font-bold mb-2">CICS Interdependency Analyzer (IA)</h3>
+                    <p class="mb-4 text-slate-600">Descubre relaciones y dependencias entre recursos CICS.</p>
+                     <ul class="list-disc list-inside space-y-2 text-slate-700">
+                        <li><strong>Análisis de Afinidad:</strong> Identifica dependencias que impiden el enrutamiento dinámico de transacciones.</li>
+                        <li><strong>Análisis de Threadsafe:</strong> Ayuda a optimizar aplicaciones para mejorar la eficiencia de la ejecución.</li>
+                        <li><strong>Visualización de Dependencias:</strong> Facilita la comprensión de arquitecturas complejas durante la modernización.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Página de Herramientas: Monitorizar -->
+        <section id="page-tool-monitor" class="page">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl font-extrabold text-slate-800">📈 Monitorizar y Alertar</h2>
+                <p class="text-lg text-slate-600 mt-2">El sistema nervioso del mainframe, vigilando 24/7.</p>
+            </div>
+            <div class="bg-white p-8 rounded-2xl shadow-lg border border-slate-200">
+                <h3 class="text-2xl font-bold mb-2">IBM OMEGAMON Suite</h3>
+                <p class="mb-6 text-slate-600">Monitorización continua y en tiempo real de la salud y el rendimiento de todo el entorno z/OS y sus subsistemas críticos.</p>
+                <div id="tabs-monitor" class="tool-tabs-container">
+                    <div class="flex border-b border-slate-200 mb-6">
+                        <button data-tab="features-mon" class="tab-button px-6 py-3 font-semibold text-slate-600 active">Características Clave</button>
+                        <button data-tab="use-cases-mon" class="tab-button px-6 py-3 font-semibold text-slate-600">Casos de Uso</button>
+                    </div>
+                    <div data-content="features-mon" class="tab-content active">
+                         <ul class="list-disc list-inside space-y-3 text-slate-700">
+                            <li><strong>Visión Unificada:</strong> Paneles de control para z/OS, CICS, Db2, IMS, Storage y Redes desde un único punto.</li>
+                            <li><strong>Detección de Anomalías con IA:</strong> OMEGAMON AI Insights aprende el comportamiento normal y alerta sobre desviaciones sutiles, yendo más allá de los umbrales estáticos.</li>
+                            <li><strong>Alertas Proactivas ("Situaciones"):</strong> Permite definir condiciones que desencadenan alertas y acciones automatizadas para una respuesta rápida.</li>
+                            <li><strong>Contexto a Nivel de Sistema:</strong> Correlaciona problemas de subsistemas con posibles restricciones de recursos a nivel de LPAR o Sysplex.</li>
+                        </ul>
+                    </div>
+                    <div data-content="use-cases-mon" class="tab-content">
+                        <p class="text-slate-700">Esencial para los equipos de operaciones de TI para mantener la disponibilidad del servicio, cumplir con los SLAs, resolver incidentes rápidamente y prevenir proactivamente las interrupciones antes de que afecten a los usuarios finales.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Página de Herramientas: Estrategizar -->
+        <section id="page-tool-strategize" class="page">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl font-extrabold text-slate-800">🧠 Estrategizar y Prevenir</h2>
+                <p class="text-lg text-slate-600 mt-2">De la analítica histórica a la prevención con AIOps.</p>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="bg-white p-8 rounded-2xl shadow-lg border border-slate-200">
+                    <h3 class="text-2xl font-bold mb-2">Z Performance & Capacity Analytics (IZPCA)</h3>
+                    <p class="mb-4 text-slate-600">Visión a largo plazo para la planificación de capacidad.</p>
+                    <ul class="list-disc list-inside space-y-2 text-slate-700">
+                        <li>Análisis de tendencias históricas.</li>
+                        <li>Previsión de necesidades de recursos.</li>
+                        <li>Gestión de costos de software.</li>
+                    </ul>
+                </div>
+                <div class="bg-white p-8 rounded-2xl shadow-lg border border-slate-200">
+                    <h3 class="text-2xl font-bold mb-2">Z Anomaly Analytics (IZAA)</h3>
+                    <p class="mb-4 text-slate-600">Prevención de incidentes mediante AIOps.</p>
+                     <ul class="list-disc list-inside space-y-2 text-slate-700">
+                        <li>Aprende el comportamiento normal del sistema.</li>
+                        <li>Detecta anomalías sutiles en tiempo real.</li>
+                        <li>Agrupa alertas para evitar la fatiga.</li>
+                    </ul>
+                </div>
+                <div class="bg-white p-8 rounded-2xl shadow-lg border border-slate-200">
+                    <h3 class="text-2xl font-bold mb-2">Z IntelliMagic Vision</h3>
+                    <p class="mb-4 text-slate-600">Analítica holística impulsada por IA.</p>
+                     <ul class="list-disc list-inside space-y-2 text-slate-700">
+                        <li>Mitigación proactiva de riesgos con "Health Insights".</li>
+                        <li>Resolución acelerada con desgloses contextuales.</li>
+                        <li>Visibilidad unificada en una GUI moderna.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Página de Flujo de Trabajo -->
+        <section id="page-workflow" class="page">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl font-extrabold text-slate-800">Flujo de Trabajo: De la Alerta a la Resolución</h2>
+                <p class="max-w-3xl mx-auto text-lg text-slate-600 mt-4">
+                    Vea cómo las herramientas de IBM colaboran en un escenario real para resolver un problema de rendimiento, demostrando el poder de un ecosistema integrado.
+                </p>
+            </div>
+            <div class="relative p-8">
+                <div class="hidden md:block absolute top-1/2 left-0 w-full h-1 bg-slate-200 -translate-y-1/2"></div>
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-8 text-center">
+                    <div class="flex flex-col items-center group">
+                        <div class="bg-white border-2 border-slate-300 group-hover:border-blue-500 group-hover:scale-110 transition-all w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold mb-4 z-10 shadow-md">1</div>
+                        <h3 class="font-bold text-lg mb-2">Detección</h3>
+                        <p class="text-sm text-slate-600 bg-white p-3 rounded-lg shadow-sm border"><strong>OMEGAMON</strong> detecta una degradación del tiempo de respuesta.</p>
+                    </div>
+                    <div class="flex flex-col items-center group">
+                         <div class="bg-white border-2 border-slate-300 group-hover:border-blue-500 group-hover:scale-110 transition-all w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold mb-4 z-10 shadow-md">2</div>
+                        <h3 class="font-bold text-lg mb-2">Aislamiento</h3>
+                        <p class="text-sm text-slate-600 bg-white p-3 rounded-lg shadow-sm border"><strong>APA</strong> identifica la espera en llamadas a Db2 y señala el código exacto.</p>
+                    </div>
+                    <div class="flex flex-col items-center group">
+                        <div class="bg-white border-2 border-slate-300 group-hover:border-blue-500 group-hover:scale-110 transition-all w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold mb-4 z-10 shadow-md">3</div>
+                        <h3 class="font-bold text-lg mb-2">Optimización</h3>
+                        <p class="text-sm text-slate-600 bg-white p-3 rounded-lg shadow-sm border"><strong>WCA4Z</strong> en VS Code recomienda cómo reescribir la consulta SQL.</p>
+                    </div>
+                    <div class="flex flex-col items-center group">
+                        <div class="bg-white border-2 border-slate-300 group-hover:border-blue-500 group-hover:scale-110 transition-all w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold mb-4 z-10 shadow-md">4</div>
+                        <h3 class="font-bold text-lg mb-2">Validación</h3>
+                        <p class="text-sm text-slate-600 bg-white p-3 rounded-lg shadow-sm border"><strong>CICS PA</strong> y <strong>APA</strong> confirman que la corrección ha mejorado el rendimiento.</p>
+                    </div>
+                    <div class="flex flex-col items-center group">
+                        <div class="bg-white border-2 border-slate-300 group-hover:border-blue-500 group-hover:scale-110 transition-all w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold mb-4 z-10 shadow-md">5</div>
+                        <h3 class="font-bold text-lg mb-2">Estrategia</h3>
+                        <p class="text-sm text-slate-600 bg-white p-3 rounded-lg shadow-sm border"><strong>IntelliMagic</strong> y <strong>IZPCA</strong> analizan tendencias para prevenir problemas futuros.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Página de Comparativa -->
+        <section id="page-comparison" class="page">
+             <div class="text-center mb-12">
+                <h2 class="text-4xl font-extrabold text-slate-800">Comparativa de Herramientas</h2>
+                <p class="max-w-3xl mx-auto text-lg text-slate-600 mt-4">
+                    Visualice las fortalezas relativas de cada herramienta. Seleccione hasta tres para compararlas dinámicamente a través de dimensiones clave.
+                </p>
+            </div>
+            <div class="bg-white p-8 rounded-2xl shadow-lg border border-slate-200">
+                <div class="flex flex-wrap justify-center gap-4 mb-8">
+                    <div>
+                        <label for="comp-tool1" class="block text-sm font-medium text-slate-700">Herramienta 1</label>
+                        <select id="comp-tool1" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"></select>
+                    </div>
+                    <div>
+                        <label for="comp-tool2" class="block text-sm font-medium text-slate-700">Herramienta 2</label>
+                        <select id="comp-tool2" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"></select>
+                    </div>
+                    <div>
+                        <label for="comp-tool3" class="block text-sm font-medium text-slate-700">Herramienta 3</label>
+                        <select id="comp-tool3" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"></select>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="comparisonChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-slate-100 mt-20 border-t border-slate-200">
+        <div class="container mx-auto px-6 py-8 text-center text-slate-500">
+            <p>&copy; 2025 Plataforma Interactiva de Herramientas de Optimización IBM z/OS.</p>
+        </div>
+    </footer>
+    
+    <script>
+        const toolsData = {
+            wca4z: { name: "watsonx Code Assistant for Z", comparison: { "Análisis": 5, "Alcance": 1, "Proactividad": 5, "Estrategia": 2, "Tiempo Real": 2 } },
+            apa: { name: "Application Performance Analyzer (APA)", comparison: { "Análisis": 5, "Alcance": 2, "Proactividad": 2, "Estrategia": 1, "Tiempo Real": 3 } },
+            cics_pa: { name: "CICS Performance Analyzer (CICS PA)", comparison: { "Análisis": 4, "Alcance": 3, "Proactividad": 2, "Estrategia": 3, "Tiempo Real": 1 } },
+            cics_ia: { name: "CICS Interdependency Analyzer (CICS IA)", comparison: { "Análisis": 3, "Alcance": 2, "Proactividad": 3, "Estrategia": 2, "Tiempo Real": 2 } },
+            omegamon: { name: "IBM OMEGAMON Suite", comparison: { "Análisis": 3, "Alcance": 5, "Proactividad": 4, "Estrategia": 2, "Tiempo Real": 5 } },
+            izpca: { name: "Z Performance & Capacity Analytics (IZPCA)", comparison: { "Análisis": 2, "Alcance": 5, "Proactividad": 4, "Estrategia": 5, "Tiempo Real": 1 } },
+            izaa: { name: "Z Anomaly Analytics (IZAA)", comparison: { "Análisis": 3, "Alcance": 5, "Proactividad": 5, "Estrategia": 4, "Tiempo Real": 4 } },
+            intellimagic: { name: "Z IntelliMagic Vision", comparison: { "Análisis": 4, "Alcance": 5, "Proactividad": 5, "Estrategia": 5, "Tiempo Real": 3 } }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const pages = document.querySelectorAll('.page');
+            const navLinks = document.querySelectorAll('a[href^="#"]');
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const mobileMenu = document.getElementById('mobile-menu');
+
+            function showPage(pageId) {
+                pages.forEach(page => {
+                    page.classList.remove('active');
+                });
+                const targetPage = document.getElementById(`page-${pageId}`);
+                if (targetPage) {
+                    targetPage.classList.add('active');
+                } else {
+                    document.getElementById('page-home').classList.add('active');
+                }
+                updateActiveNav(pageId);
+                window.scrollTo(0, 0);
+            }
+
+            function updateActiveNav(pageId) {
+                const mainCategory = pageId.split('-')[0];
+                document.querySelectorAll('.nav-link').forEach(link => {
+                    link.classList.remove('active');
+                    const linkHref = link.getAttribute('href').substring(1);
+                    if (linkHref === pageId || linkHref === mainCategory || (pageId.startsWith('tool-') && link.textContent.trim().startsWith('Herramientas'))) {
+                         link.classList.add('active');
+                    }
+                });
+            }
+
+            function handleNavigation(e) {
+                const href = this.getAttribute('href');
+                if (href.startsWith('#')) {
+                    e.preventDefault();
+                    const pageId = href.substring(1);
+                    window.location.hash = pageId;
+                    showPage(pageId);
+                    mobileMenu.classList.add('hidden');
+                }
+            }
+
+            navLinks.forEach(link => {
+                link.addEventListener('click', handleNavigation);
+            });
+            
+            mobileMenuButton.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+            });
+
+            const initialPageId = window.location.hash ? window.location.hash.substring(1) : 'home';
+            showPage(initialPageId);
+            
+            setupTabbedContent();
+            setupComparisonChart();
+        });
+
+        function setupTabbedContent() {
+            document.querySelectorAll('.tool-tabs-container').forEach(container => {
+                const tabButtons = container.querySelectorAll('.tab-button');
+                const tabContents = container.querySelectorAll('.tab-content');
+
+                tabButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        const tabId = button.dataset.tab;
+                        
+                        tabButtons.forEach(btn => btn.classList.remove('active'));
+                        button.classList.add('active');
+
+                        tabContents.forEach(content => {
+                            content.classList.remove('active');
+                            if (content.dataset.content === tabId) {
+                                content.classList.add('active');
+                            }
+                        });
+                    });
+                });
+            });
+        }
+
+        function setupComparisonChart() {
+            const selectors = [document.getElementById('comp-tool1'), document.getElementById('comp-tool2'), document.getElementById('comp-tool3')];
+            const ctx = document.getElementById('comparisonChart').getContext('2d');
+            
+            const options = Object.keys(toolsData).map(key => `<option value="${key}">${toolsData[key].name}</option>`).join('');
+            selectors.forEach(selector => {
+                selector.innerHTML = '<option value="">-- Seleccionar --</option>' + options;
+            });
+
+            selectors[0].value = 'apa';
+            selectors[1].value = 'omegamon';
+            selectors[2].value = 'intellimagic';
+
+            const chartLabels = ["Análisis Detallado", "Alcance Ambiental", "Proactividad", "Visión Estratégica", "Capacidad Tiempo Real"];
+            const chartColors = ['rgba(37, 99, 235, 0.4)', 'rgba(79, 70, 229, 0.4)', 'rgba(14, 165, 233, 0.4)'];
+            const borderColors = ['#2563eb', '#4f46e5', '#0ea5e9'];
+
+            const comparisonChart = new Chart(ctx, {
+                type: 'radar',
+                data: { labels: chartLabels, datasets: [] },
+                options: {
+                    maintainAspectRatio: false,
+                    responsive: true,
+                    scales: {
+                        r: {
+                            angleLines: { color: '#e2e8f0' },
+                            grid: { color: '#e2e8f0' },
+                            pointLabels: { font: { size: 12, weight: '600' }, color: '#334155' },
+                            ticks: { backdropColor: '#f8fafc', color: '#64748b', stepSize: 1, font: { weight: 'bold' } },
+                            min: 0, max: 5
+                        }
+                    },
+                    plugins: {
+                        legend: { position: 'top', labels: { color: '#1e293b', font: { size: 14, weight: '500' } } }
+                    }
+                }
+            });
+
+            function updateChart() {
+                const selectedTools = selectors.map(s => s.value).filter(v => v);
+                const datasets = [];
+                
+                selectedTools.forEach((toolId, index) => {
+                    const tool = toolsData[toolId];
+                    if (tool) {
+                        datasets.push({
+                            label: tool.name,
+                            data: Object.values(tool.comparison),
+                            backgroundColor: chartColors[index],
+                            borderColor: borderColors[index],
+                            borderWidth: 2.5,
+                            pointBackgroundColor: borderColors[index],
+                            pointBorderColor: '#fff',
+                            pointHoverBackgroundColor: '#fff',
+                            pointHoverBorderColor: borderColors[index],
+                            pointRadius: 4,
+                            pointHoverRadius: 7
+                        });
+                    }
+                });
+                
+                comparisonChart.data.datasets = datasets;
+                comparisonChart.update();
+            }
+
+            selectors.forEach(selector => selector.addEventListener('change', updateChart));
+            updateChart();
+        }
+    </script>
+</body>
+</html>
