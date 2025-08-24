@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plataforma de Herramientas de Optimización IBM z/OS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Modern Tech Light -->
+    <!-- Application Structure Plan: Redesigned from a single-page scroll to a simulated Multi-Page Application (MPA) within one HTML file. This addresses the user's request for a "decoupled" feel. Navigation is handled by JS, showing/hiding full-screen sections ('pages') for Home, dedicated tool deep-dives, Workflow, and Comparison. This architecture provides a more organized, in-depth exploration of each tool, improving information hierarchy and user focus compared to the previous long-scroll format. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Overall tool ecosystem -> Goal: Organize & Navigate -> Viz: Homepage with interactive lifecycle cards linking to dedicated pages (HTML/CSS) -> Interaction: Click to navigate to a new "page" view -> Justification: Provides a clear, central hub for exploration.
+        - Report Info: Individual tool details -> Goal: Inform in-depth -> Viz: Redesigned dedicated "pages" for each tool category with an interactive accordion layout -> Interaction: Click to expand/collapse tool details -> Justification: Improves scannability, reduces initial cognitive load, and encourages focused exploration.
+        - Report Info: Workflow example -> Goal: Explain Process -> Viz: Redesigned dedicated page with a tabbed, scenario-based structure, each with an interactive vertical timeline -> Interaction: Click tabs to switch scenarios; scroll-based animations -> Justification: Demonstrates tool versatility and combined value in multiple real-world situations.
+        - Report Info: Tool comparison matrix -> Goal: Compare -> Viz: Dedicated page with interactive Radar Chart (Chart.js/Canvas) and dynamic text analysis -> Interaction: Select tools to update both chart and conceptual summary -> Justification: Creates a powerful, focused comparison tool combining visual and textual data.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        html {
+            scroll-behavior: smooth;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            color: #1e293b;
+        }
+        .page {
+            display: none;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        .page.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .nav-link {
+            position: relative;
+            transition: color 0.3s;
+        }
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 2px;
+            bottom: -4px;
+            left: 50%;
+            background-color: #2563eb;
+            transition: width 0.3s, left 0.3s;
+        }
+        .nav-link.active, .nav-link:hover {
+            color: #2563eb;
+        }
+        .nav-link.active::after, .nav-link:hover::after {
+            width: 100%;
+            left: 0;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 500px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 500px;
+            }
+        }
+        .workflow-item {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+        }
+        .workflow-item.is-visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-in-out, padding 0.5s ease-in-out;
+            padding: 0 2rem;
+        }
+        .accordion-button.active + .accordion-content {
+            max-height: 1000px; /* Adjust as needed */
+            padding: 2rem;
+        }
+        .accordion-button .accordion-icon {
+            transition: transform 0.3s;
+        }
+        .accordion-button.active .accordion-icon {
+            transform: rotate(45deg);
+        }
+        .workflow-tab {
+            transition: all 0.3s;
+        }
+        .workflow-tab.active {
+            background-color: #2563eb;
+            color: white;
+        }
+        .workflow-scenario {
+            display: none;
+        }
+        .workflow-scenario.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <header class="bg-white/80 sticky top-0 z-50 backdrop-blur-lg border-b border-slate-200">
+        <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <a href="#home" class="text-2xl font-extrabold text-slate-800">
+                IBM z/OS <span class="text-blue-600">Optimize</span>
+            </a>
+            <div class="hidden md:flex items-center space-x-8 font-semibold text-slate-600">
+                <a href="#home" class="nav-link">Inicio</a>
+                <div class="relative group">
+                    <button class="nav-link flex items-center">Herramientas 
+                        <span class="ml-1 mt-1 text-xs transform transition-transform group-hover:rotate-180">&#9662;</span>
+                    </button>
+                    <div id="tools-dropdown" class="absolute hidden group-hover:block bg-white shadow-xl rounded-md mt-2 py-2 w-64 border border-slate-200">
+                        <a href="#tool-develop" class="block px-4 py-2 text-slate-700 hover:bg-blue-50 hover:text-blue-600">💻 Desarrollar y Optimizar</a>
+                        <a href="#tool-diagnose" class="block px-4 py-2 text-slate-700 hover:bg-blue-50 hover:text-blue-600">🔬 Diagnosticar y Analizar</a>
+                        <a href="#tool-monitor" class="block px-4 py-2 text-slate-700 hover:bg-blue-50 hover:text-blue-600">📈 Monitorizar y Alertar</a>
+                        <a href="#tool-strategize" class="block px-4 py-2 text-slate-700 hover:bg-blue-50 hover:text-blue-600">🧠 Estrategizar y Prevenir</a>
+                    </div>
+                </div>
+                <a href="#workflow" class="nav-link">Flujo de Trabajo</a>
+                <a href="#comparison" class="nav-link">Comparativa</a>
+            </div>
+            <button id="mobile-menu-button" class="md:hidden text-slate-800 text-2xl">☰</button>
+        </nav>
+        <div id="mobile-menu" class="hidden md:hidden bg-white border-t border-slate-200">
+            <a href="#home" class="block py-3 px-6 text-slate-700 hover:bg-blue-50">Inicio</a>
+            <a href="#tool-develop" class="block py-3 px-6 text-slate-700 hover:bg-blue-50">Desarrollar y Optimizar</a>
+            <a href="#tool-diagnose" class="block py-3 px-6 text-slate-700 hover:bg-blue-50">Diagnosticar y Analizar</a>
+            <a href="#tool-monitor" class="block py-3 px-6 text-slate-700 hover:bg-blue-50">Monitorizar y Alertar</a>
+            <a href="#tool-strategize" class="block py-3 px-6 text-slate-700 hover:bg-blue-50">Estrategizar y Prevenir</a>
+            <a href="#workflow" class="block py-3 px-6 text-slate-700 hover:bg-blue-50">Flujo de Trabajo</a>
+            <a href="#comparison" class="block py-3 px-6 text-slate-700 hover:bg-blue-50">Comparativa</a>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-6 py-12">
+
+        <!-- Página de Inicio -->
+        <section id="page-home" class="page">
+            <div class="text-center">
+                <h1 class="text-4xl md:text-6xl font-extrabold text-slate-800 mb-4">Ecosistema de Optimización de IBM z/OS</h1>
+                <p class="max-w-3xl mx-auto text-lg text-slate-600 mb-12">
+                    Una plataforma interactiva para explorar el conjunto de herramientas que garantizan el máximo rendimiento, eficiencia y fiabilidad en el mainframe. Descubra la solución adecuada para cada fase del ciclo de vida de la optimización.
+                </p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <a href="#tool-develop" class="group block bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-shadow duration-300 border border-slate-200 text-center">
+                    <div class="text-5xl mb-4 transform group-hover:scale-110 transition-transform">💻</div>
+                    <h3 class="text-2xl font-bold mb-2 text-slate-800">Desarrollar y Optimizar</h3>
+                    <p class="text-slate-600">Integre la optimización del rendimiento directamente en el ciclo de desarrollo.</p>
+                </a>
+                <a href="#tool-diagnose" class="group block bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-shadow duration-300 border border-slate-200 text-center">
+                    <div class="text-5xl mb-4 transform group-hover:scale-110 transition-transform">🔬</div>
+                    <h3 class="text-2xl font-bold mb-2 text-slate-800">Diagnosticar y Analizar</h3>
+                    <p class="text-slate-600">Identifique la causa raíz de los problemas de rendimiento a nivel de aplicación.</p>
+                </a>
+                <a href="#tool-monitor" class="group block bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-shadow duration-300 border border-slate-200 text-center">
+                    <div class="text-5xl mb-4 transform group-hover:scale-110 transition-transform">📈</div>
+                    <h3 class="text-2xl font-bold mb-2 text-slate-800">Monitorizar y Alertar</h3>
+                    <p class="text-slate-600">Vigile la salud del sistema en tiempo real y responda proactivamente.</p>
+                </a>
+                <a href="#tool-strategize" class="group block bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-shadow duration-300 border border-slate-200 text-center">
+                    <div class="text-5xl mb-4 transform group-hover:scale-110 transition-transform">🧠</div>
+                    <h3 class="text-2xl font-bold mb-2 text-slate-800">Estrategizar y Prevenir</h3>
+                    <p class="text-slate-600">Utilice AIOps para la planificación a largo plazo y la prevención de incidentes.</p>
+                </a>
+            </div>
+        </section>
+
+        <!-- Páginas de Herramientas (Rediseñadas con Acordeón) -->
+        <section id="page-tool-develop" class="page">
+            <div class="flex flex-col md:flex-row items-center gap-8 mb-12 bg-slate-100 p-8 rounded-2xl">
+                <div class="text-6xl bg-blue-100 p-4 rounded-full">💻</div>
+                <div>
+                    <h2 class="text-4xl font-extrabold text-slate-800">Desarrollar y Optimizar</h2>
+                    <p class="text-lg text-slate-600 mt-2">Previniendo ineficiencias desde la primera línea de código con la filosofía "shift-left".</p>
+                </div>
+            </div>
+            <div class="accordion-container space-y-4">
+                <div class="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+                    <button class="accordion-button w-full flex justify-between items-center p-6 text-left">
+                        <h3 class="text-2xl font-bold text-slate-800">watsonx Code Assistant for Z</h3>
+                        <span class="accordion-icon text-3xl text-blue-500 font-light transform transition-transform">+</span>
+                    </button>
+                    <div class="accordion-content">
+                        <p class="mb-8 text-slate-600 text-lg">Optimización de código COBOL impulsada por IA directamente en el IDE del desarrollador.</p>
+                        <div class="grid md:grid-cols-2 gap-8">
+                            <div>
+                                <h4 class="font-bold text-xl mb-3 text-blue-600 flex items-center gap-2"><span>⚙️</span> Características Clave</h4>
+                                <ul class="space-y-3 text-slate-700">
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Análisis en Tiempo de Ejecución:</strong> Identifica ineficiencias que solo se manifiestan con datos reales.</span></li>
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Recomendaciones Priorizadas:</strong> Clasifica problemas por impacto para enfocar los esfuerzos.</span></li>
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Integración con VS Code:</strong> Se integra fluidamente en el flujo de trabajo del desarrollador moderno.</span></li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-xl mb-3 text-blue-600 flex items-center gap-2"><span>🎯</span> Caso de Uso Principal</h4>
+                                <p class="text-slate-700">Un desarrollador está modernizando un programa batch de COBOL que consume muchos recursos. Usando la extensión en VS Code, la IA analiza el código y recomienda reescribir un bucle de procesamiento de datos, reduciendo el consumo de CPU en un 15% antes de que el código llegue a producción.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section id="page-tool-diagnose" class="page">
+             <div class="flex flex-col md:flex-row items-center gap-8 mb-12 bg-slate-100 p-8 rounded-2xl">
+                <div class="text-6xl bg-blue-100 p-4 rounded-full">🔬</div>
+                <div>
+                    <h2 class="text-4xl font-extrabold text-slate-800">Diagnosticar y Analizar</h2>
+                    <p class="text-lg text-slate-600 mt-2">Encontrando la causa raíz de problemas complejos con precisión quirúrgica.</p>
+                </div>
+            </div>
+            <div class="accordion-container space-y-4">
+                <div class="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+                    <button class="accordion-button w-full flex justify-between items-center p-6 text-left">
+                        <h3 class="text-2xl font-bold text-slate-800">Application Performance Analyzer (APA)</h3>
+                        <span class="accordion-icon text-3xl text-blue-500 font-light transform transition-transform">+</span>
+                    </button>
+                    <div class="accordion-content">
+                        <p class="mb-6 text-slate-600 text-lg">Diagnóstico para aplicaciones en ejecución con impacto mínimo.</p>
+                        <div class="grid md:grid-cols-2 gap-8">
+                            <div>
+                                <h4 class="font-bold text-xl mb-3 text-blue-600 flex items-center gap-2"><span>⚙️</span> Características Clave</h4>
+                                <ul class="space-y-3 text-slate-700">
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Mapeo del Programa Fuente:</strong> Correlaciona el rendimiento directamente con las líneas de código exactas.</span></li>
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Análisis No Intrusivo:</strong> Utiliza muestreo estadístico para minimizar el overhead en producción.</span></li>
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Soporte Amplio:</strong> Compatible con CICS, Db2, IMS, Batch y múltiples lenguajes.</span></li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-xl mb-3 text-blue-600 flex items-center gap-2"><span>🎯</span> Caso de Uso Principal</h4>
+                                <p class="text-slate-700">Los usuarios reportan lentitud en una transacción CICS. Un analista usa APA y descubre que el 80% del tiempo de respuesta es una espera en una llamada a Db2. El informe señala la sentencia `EXEC SQL` exacta, permitiendo una solución rápida y dirigida.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+                    <button class="accordion-button w-full flex justify-between items-center p-6 text-left">
+                        <h3 class="text-2xl font-bold text-slate-800">CICS PA & CICS IA</h3>
+                        <span class="accordion-icon text-3xl text-blue-500 font-light transform transition-transform">+</span>
+                    </button>
+                    <div class="accordion-content">
+                        <p class="mb-6 text-slate-600 text-lg">Análisis histórico profundo y descubrimiento de dependencias en CICS.</p>
+                         <div class="grid md:grid-cols-2 gap-8">
+                            <div>
+                                <h4 class="font-bold text-xl mb-3 text-blue-600 flex items-center gap-2"><span>⚙️</span> Características Clave</h4>
+                                <ul class="space-y-3 text-slate-700">
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Análisis Histórico (PA):</strong> Compara el rendimiento antes y después de cambios para validar mejoras.</span></li>
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Análisis de Afinidad (IA):</strong> Identifica dependencias que impiden el enrutamiento dinámico.</span></li>
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Visualización de Dependencias (IA):</strong> Facilita la comprensión de arquitecturas complejas.</span></li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-xl mb-3 text-blue-600 flex items-center gap-2"><span>🎯</span> Caso de Uso Principal</h4>
+                                <p class="text-slate-700">Un equipo planea habilitar el enrutamiento dinámico para una aplicación. CICS IA identifica una afinidad oculta con un área de almacenamiento temporal. Una vez resuelta, CICS PA se usa para confirmar que el rendimiento no se ha degradado tras el cambio.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="page-tool-monitor" class="page">
+            <div class="flex flex-col md:flex-row items-center gap-8 mb-12 bg-slate-100 p-8 rounded-2xl">
+                <div class="text-6xl bg-blue-100 p-4 rounded-full">📈</div>
+                <div>
+                    <h2 class="text-4xl font-extrabold text-slate-800">Monitorizar y Alertar</h2>
+                    <p class="text-lg text-slate-600 mt-2">El sistema nervioso del mainframe, proporcionando una visión 24/7 de la salud del sistema.</p>
+                </div>
+            </div>
+            <div class="accordion-container space-y-4">
+                 <div class="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+                    <button class="accordion-button w-full flex justify-between items-center p-6 text-left">
+                        <h3 class="text-2xl font-bold text-slate-800">IBM OMEGAMON Suite</h3>
+                        <span class="accordion-icon text-3xl text-blue-500 font-light transform transition-transform">+</span>
+                    </button>
+                    <div class="accordion-content">
+                        <p class="mb-8 text-slate-600 text-lg">Monitorización continua y en tiempo real de z/OS y sus subsistemas críticos.</p>
+                        <div class="grid md:grid-cols-2 gap-8">
+                            <div>
+                                <h4 class="font-bold text-xl mb-3 text-blue-600 flex items-center gap-2"><span>⚙️</span> Características Clave</h4>
+                                <ul class="space-y-3 text-slate-700">
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Visión Unificada:</strong> Paneles de control para z/OS, CICS, Db2, IMS, Storage y Redes.</span></li>
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Detección de Anomalías con IA:</strong> Aprende el comportamiento normal y alerta sobre desviaciones sutiles.</span></li>
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Alertas Proactivas ("Situaciones"):</strong> Permite definir condiciones que desencadenan alertas y acciones automatizadas.</span></li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-xl mb-3 text-blue-600 flex items-center gap-2"><span>🎯</span> Caso de Uso Principal</h4>
+                                <p class="text-slate-700">OMEGAMON AI for CICS detecta una degradación en el tiempo de respuesta de una transacción. La alerta se activa antes de que se viole un SLA, permitiendo al equipo de operaciones investigar y resolver el problema (quizás usando APA) antes de que los usuarios finales se vean afectados.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="page-tool-strategize" class="page">
+            <div class="flex flex-col md:flex-row items-center gap-8 mb-12 bg-slate-100 p-8 rounded-2xl">
+                <div class="text-6xl bg-blue-100 p-4 rounded-full">🧠</div>
+                <div>
+                    <h2 class="text-4xl font-extrabold text-slate-800">Estrategizar y Prevenir</h2>
+                    <p class="text-lg text-slate-600 mt-2">Pasando de la analítica histórica a la prevención de incidentes con AIOps.</p>
+                </div>
+            </div>
+            <div class="accordion-container space-y-4">
+                 <div class="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+                    <button class="accordion-button w-full flex justify-between items-center p-6 text-left">
+                        <h3 class="text-2xl font-bold text-slate-800">Z Performance & Capacity Analytics (IZPCA)</h3>
+                        <span class="accordion-icon text-3xl text-blue-500 font-light transform transition-transform">+</span>
+                    </button>
+                    <div class="accordion-content">
+                        <p class="mb-6 text-slate-600 text-lg">Visión a largo plazo para la planificación de capacidad y gestión de costos.</p>
+                         <div class="grid md:grid-cols-2 gap-8">
+                            <div>
+                                <h4 class="font-bold text-xl mb-3 text-blue-600 flex items-center gap-2"><span>⚙️</span> Características Clave</h4>
+                                <ul class="space-y-3 text-slate-700">
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Análisis de Tendencias Históricas:</strong> Utiliza datos SMF para identificar patrones de crecimiento.</span></li>
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Previsión de Capacidad:</strong> Predice las necesidades futuras de recursos para evitar compras reactivas.</span></li>
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Gestión de Costos:</strong> Ayuda a optimizar los gastos de software.</span></li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-xl mb-3 text-blue-600 flex items-center gap-2"><span>🎯</span> Caso de Uso Principal</h4>
+                                <p class="text-slate-700">Un planificador de capacidad utiliza IZPCA para analizar el crecimiento del consumo de MSU durante los últimos 2 años. El informe de previsión indica que se necesitará una actualización de CPU en 9 meses, dando tiempo suficiente para planificar y presupuestar la compra.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+                    <button class="accordion-button w-full flex justify-between items-center p-6 text-left">
+                        <h3 class="text-2xl font-bold text-slate-800">Z Anomaly Analytics (IZAA) & IntelliMagic Vision</h3>
+                        <span class="accordion-icon text-3xl text-blue-500 font-light transform transition-transform">+</span>
+                    </button>
+                    <div class="accordion-content">
+                        <p class="mb-6 text-slate-600 text-lg">Prevención proactiva de incidentes y analítica de rendimiento holística.</p>
+                         <div class="grid md:grid-cols-2 gap-8">
+                            <div>
+                                <h4 class="font-bold text-xl mb-3 text-blue-600 flex items-center gap-2"><span>⚙️</span> Características Clave</h4>
+                                <ul class="space-y-3 text-slate-700">
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Detección de Anomalías (IZAA):</strong> Aprende el comportamiento normal y detecta desviaciones sutiles en tiempo real.</span></li>
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Health Insights (IntelliMagic):</strong> Califica la salud de la infraestructura e identifica riesgos ocultos.</span></li>
+                                    <li class="flex items-start gap-3"><span class="mt-1 text-blue-500">✓</span><span><strong>Resolución Acelerada:</strong> Ambas herramientas guían a los analistas hacia la causa raíz.</span></li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-xl mb-3 text-blue-600 flex items-center gap-2"><span>🎯</span> Caso de Uso Principal</h4>
+                                <p class="text-slate-700">IZAA emite una alerta sobre un comportamiento anómalo en los logs de Db2. El equipo utiliza IntelliMagic Vision para investigar y descubre una calificación de salud deficiente en los buffer pools, identificando un riesgo de rendimiento antes de que cause una interrupción del servicio.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Página de Flujo de Trabajo -->
+        <section id="page-workflow" class="page">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl font-extrabold text-slate-800">Flujo de Trabajo: Escenarios del Mundo Real</h2>
+                <p class="max-w-3xl mx-auto text-lg text-slate-600 mt-4">
+                    Explore diferentes situaciones para ver cómo las herramientas de IBM colaboran para generar valor.
+                </p>
+            </div>
+            <div class="flex justify-center mb-8">
+                <div class="flex space-x-2 bg-slate-100 p-2 rounded-xl">
+                    <button class="workflow-tab px-4 py-2 rounded-lg font-semibold active" data-scenario="1">Escenario 1: Transacción CICS Lenta</button>
+                    <button class="workflow-tab px-4 py-2 rounded-lg font-semibold" data-scenario="2">Escenario 2: Job Batch Ineficiente</button>
+                    <button class="workflow-tab px-4 py-2 rounded-lg font-semibold" data-scenario="3">Escenario 3: Riesgo Proactivo</button>
+                </div>
+            </div>
+
+            <div id="scenario-1" class="workflow-scenario active">
+                <div class="relative max-w-2xl mx-auto">
+                    <div class="absolute top-0 left-1/2 w-1 h-full bg-slate-200 -translate-x-1/2"></div>
+                    <div class="space-y-12">
+                        <div class="workflow-item relative flex items-center justify-start"><div class="w-1/2 pr-8 text-right"><div class="bg-white p-6 rounded-xl shadow-xl border border-slate-200"><h3 class="font-bold text-xl text-blue-600 mb-2">1. Detección Proactiva</h3><p class="text-slate-600"><strong>OMEGAMON AI</strong> detecta una degradación del 30% en el tiempo de respuesta de transacciones críticas.</p></div></div><div class="absolute left-1/2 -translate-x-1/2 bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold z-10 ring-8 ring-white">📈</div></div>
+                        <div class="workflow-item relative flex items-center justify-end"><div class="absolute left-1/2 -translate-x-1/2 bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold z-10 ring-8 ring-white">🔬</div><div class="w-1/2 pl-8 text-left"><div class="bg-white p-6 rounded-xl shadow-xl border border-slate-200"><h3 class="font-bold text-xl text-blue-600 mb-2">2. Aislamiento</h3><p class="text-slate-600"><strong>APA</strong> revela que el 70% del tiempo es espera de Db2 y señala las sentencias `EXEC SQL` exactas.</p></div></div></div>
+                        <div class="workflow-item relative flex items-center justify-start"><div class="w-1/2 pr-8 text-right"><div class="bg-white p-6 rounded-xl shadow-xl border border-slate-200"><h3 class="font-bold text-xl text-blue-600 mb-2">3. Optimización</h3><p class="text-slate-600"><strong>WCA4Z</strong> en VS Code recomienda reescribir la consulta SQL para usar un índice de manera más efectiva.</p></div></div><div class="absolute left-1/2 -translate-x-1/2 bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold z-10 ring-8 ring-white">💻</div></div>
+                        <div class="workflow-item relative flex items-center justify-end"><div class="absolute left-1/2 -translate-x-1/2 bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold z-10 ring-8 ring-white">📊</div><div class="w-1/2 pl-8 text-left"><div class="bg-white p-6 rounded-xl shadow-xl border border-slate-200"><h3 class="font-bold text-xl text-blue-600 mb-2">4. Validación</h3><p class="text-slate-600"><strong>CICS PA</strong> compara informes de antes y después, confirmando la reducción en la espera de Db2.</p></div></div></div>
+                    </div>
+                </div>
+            </div>
+            <div id="scenario-2" class="workflow-scenario">
+                 <div class="relative max-w-2xl mx-auto">
+                    <div class="absolute top-0 left-1/2 w-1 h-full bg-slate-200 -translate-x-1/2"></div>
+                    <div class="space-y-12">
+                        <div class="workflow-item relative flex items-center justify-start"><div class="w-1/2 pr-8 text-right"><div class="bg-white p-6 rounded-xl shadow-xl border border-slate-200"><h3 class="font-bold text-xl text-blue-600 mb-2">1. Identificación</h3><p class="text-slate-600">Un job batch nocturno excede su ventana de procesamiento. <strong>IZPCA</strong> muestra que su consumo de CPU ha crecido un 20% en 3 meses.</p></div></div><div class="absolute left-1/2 -translate-x-1/2 bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold z-10 ring-8 ring-white">📅</div></div>
+                        <div class="workflow-item relative flex items-center justify-end"><div class="absolute left-1/2 -translate-x-1/2 bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold z-10 ring-8 ring-white">🔬</div><div class="w-1/2 pl-8 text-left"><div class="bg-white p-6 rounded-xl shadow-xl border border-slate-200"><h3 class="font-bold text-xl text-blue-600 mb-2">2. Aislamiento</h3><p class="text-slate-600"><strong>APA</strong> se ejecuta en el job y determina que el 90% de la CPU se consume en un único módulo COBOL que procesa un archivo VSAM.</p></div></div></div>
+                        <div class="workflow-item relative flex items-center justify-start"><div class="w-1/2 pr-8 text-right"><div class="bg-white p-6 rounded-xl shadow-xl border border-slate-200"><h3 class="font-bold text-xl text-blue-600 mb-2">3. Optimización</h3><p class="text-slate-600"><strong>WCA4Z</strong> analiza el módulo e identifica un algoritmo de búsqueda ineficiente. El desarrollador aplica la corrección sugerida.</p></div></div><div class="absolute left-1/2 -translate-x-1/2 bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold z-10 ring-8 ring-white">💻</div></div>
+                        <div class="workflow-item relative flex items-center justify-end"><div class="absolute left-1/2 -translate-x-1/2 bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold z-10 ring-8 ring-white">✅</div><div class="w-1/2 pl-8 text-left"><div class="bg-white p-6 rounded-xl shadow-xl border border-slate-200"><h3 class="font-bold text-xl text-blue-600 mb-2">4. Validación</h3><p class="text-slate-600">Una nueva ejecución del job con <strong>APA</strong> confirma una reducción del 25% en el tiempo de CPU, volviendo a cumplir la ventana de procesamiento.</p></div></div></div>
+                    </div>
+                </div>
+            </div>
+            <div id="scenario-3" class="workflow-scenario">
+                 <div class="relative max-w-2xl mx-auto">
+                    <div class="absolute top-0 left-1/2 w-1 h-full bg-slate-200 -translate-x-1/2"></div>
+                    <div class="space-y-12">
+                        <div class="workflow-item relative flex items-center justify-start"><div class="w-1/2 pr-8 text-right"><div class="bg-white p-6 rounded-xl shadow-xl border border-slate-200"><h3 class="font-bold text-xl text-blue-600 mb-2">1. Detección de Anomalías</h3><p class="text-slate-600"><strong>IZAA</strong> alerta sobre un aumento anómalo de mensajes de error en los logs de Db2 que no han activado ninguna alerta estándar.</p></div></div><div class="absolute left-1/2 -translate-x-1/2 bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold z-10 ring-8 ring-white">🤖</div></div>
+                        <div class="workflow-item relative flex items-center justify-end"><div class="absolute left-1/2 -translate-x-1/2 bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold z-10 ring-8 ring-white">🧠</div><div class="w-1/2 pl-8 text-left"><div class="bg-white p-6 rounded-xl shadow-xl border border-slate-200"><h3 class="font-bold text-xl text-blue-600 mb-2">2. Análisis de Salud</h3><p class="text-slate-600">El equipo usa <strong>IntelliMagic Vision</strong>, que muestra una calificación de salud deficiente en los buffer pools de Db2, correlacionando la anomalía con un riesgo de infraestructura.</p></div></div></div>
+                        <div class="workflow-item relative flex items-center justify-start"><div class="w-1/2 pr-8 text-right"><div class="bg-white p-6 rounded-xl shadow-xl border border-slate-200"><h3 class="font-bold text-xl text-blue-600 mb-2">3. Investigación</h3><p class="text-slate-600"><strong>OMEGAMON for Db2</strong> se utiliza para investigar en tiempo real y se descubre que una nueva aplicación está realizando lecturas ineficientes que saturan los buffer pools.</p></div></div><div class="absolute left-1/2 -translate-x-1/2 bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold z-10 ring-8 ring-white">📈</div></div>
+                        <div class="workflow-item relative flex items-center justify-end"><div class="absolute left-1/2 -translate-x-1/2 bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold z-10 ring-8 ring-white">🛠️</div><div class="w-1/2 pl-8 text-left"><div class="bg-white p-6 rounded-xl shadow-xl border border-slate-200"><h3 class="font-bold text-xl text-blue-600 mb-2">4. Resolución Preventiva</h3><p class="text-slate-600">El equipo de aplicaciones es notificado y utiliza <strong>APA</strong> para optimizar el SQL de la nueva aplicación, resolviendo el problema antes de que cause una interrupción del servicio.</p></div></div></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Página de Comparativa -->
+        <section id="page-comparison" class="page">
+             <div class="text-center mb-12">
+                <h2 class="text-4xl font-extrabold text-slate-800">Comparativa de Herramientas</h2>
+                <p class="max-w-3xl mx-auto text-lg text-slate-600 mt-4">
+                    Visualice las fortalezas relativas de cada herramienta. Seleccione hasta tres para compararlas dinámicamente a través de dimensiones clave.
+                </p>
+            </div>
+            <div class="bg-white p-8 rounded-2xl shadow-lg border border-slate-200">
+                <div class="flex flex-wrap justify-center gap-4 mb-8">
+                    <div>
+                        <label for="comp-tool1" class="block text-sm font-medium text-slate-700">Herramienta 1</label>
+                        <select id="comp-tool1" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"></select>
+                    </div>
+                    <div>
+                        <label for="comp-tool2" class="block text-sm font-medium text-slate-700">Herramienta 2</label>
+                        <select id="comp-tool2" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"></select>
+                    </div>
+                    <div>
+                        <label for="comp-tool3" class="block text-sm font-medium text-slate-700">Herramienta 3</label>
+                        <select id="comp-tool3" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"></select>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="comparisonChart"></canvas>
+                </div>
+                <div id="comparison-details" class="mt-12 border-t border-slate-200 pt-8">
+                    <!-- Dynamic content will be inserted here -->
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-slate-100 mt-20 border-t border-slate-200">
+        <div class="container mx-auto px-6 py-8 text-center text-slate-500">
+            <p>&copy; 2025 Plataforma Interactiva de Herramientas de Optimización IBM z/OS.</p>
+        </div>
+    </footer>
+    
+    <script>
+        const toolsData = {
+            wca4z: { 
+                name: "watsonx Code Assistant for Z", 
+                comparison: { "Análisis": 5, "Alcance": 1, "Proactividad": 5, "Estrategia": 2, "Tiempo Real": 2 },
+                summary: "Optimización de código COBOL impulsada por IA directamente en el IDE del desarrollador.",
+                strength: "Su punto fuerte es el análisis proactivo a nivel de código. Permite a los desarrolladores corregir ineficiencias antes de que lleguen a producción, siguiendo la filosofía 'shift-left'."
+            },
+            apa: { 
+                name: "Application Performance Analyzer (APA)", 
+                comparison: { "Análisis": 5, "Alcance": 2, "Proactividad": 2, "Estrategia": 1, "Tiempo Real": 3 },
+                summary: "Diagnóstico de causa raíz para aplicaciones en ejecución con impacto mínimo en el sistema.",
+                strength: "Su punto fuerte es el análisis detallado. Es la herramienta 'quirúrgica' para encontrar la línea de código exacta que causa un cuello de botella en una aplicación específica."
+            },
+            cics_pa: { 
+                name: "CICS Performance Analyzer (CICS PA)", 
+                comparison: { "Análisis": 4, "Alcance": 3, "Proactividad": 2, "Estrategia": 3, "Tiempo Real": 1 },
+                summary: "Análisis histórico profundo y perfilado de transacciones CICS basado en registros SMF.",
+                strength: "Su punto fuerte es el análisis histórico. Es ideal para validar el impacto de los cambios y para la planificación de capacidad a largo plazo en entornos CICS."
+            },
+            cics_ia: { 
+                name: "CICS Interdependency Analyzer (CICS IA)", 
+                comparison: { "Análisis": 3, "Alcance": 2, "Proactividad": 3, "Estrategia": 2, "Tiempo Real": 2 },
+                summary: "Descubre y analiza las relaciones y dependencias entre los recursos de CICS.",
+                strength: "Su punto fuerte es el análisis de dependencias. Es crucial para proyectos de modernización y para habilitar el enrutamiento dinámico al eliminar afinidades ocultas."
+            },
+            omegamon: { 
+                name: "IBM OMEGAMON Suite", 
+                comparison: { "Análisis": 3, "Alcance": 5, "Proactividad": 4, "Estrategia": 2, "Tiempo Real": 5 },
+                summary: "Monitorización continua y en tiempo real de la salud de todo el entorno z/OS.",
+                strength: "Su punto fuerte es la capacidad en tiempo real y el alcance ambiental. Actúa como el 'sistema nervioso' del mainframe, proporcionando una visión 24/7 de la salud de todo el sistema."
+            },
+            izpca: { 
+                name: "Z Performance & Capacity Analytics (IZPCA)", 
+                comparison: { "Análisis": 2, "Alcance": 5, "Proactividad": 4, "Estrategia": 5, "Tiempo Real": 1 },
+                summary: "Gestión del rendimiento a largo plazo y planificación de la capacidad basada en datos históricos.",
+                strength: "Su punto fuerte es la visión estratégica. Es la herramienta definitiva para la planificación de capacidad a largo plazo y la gestión de costos de software."
+            },
+            izaa: { 
+                name: "Z Anomaly Analytics (IZAA)", 
+                comparison: { "Análisis": 3, "Alcance": 5, "Proactividad": 5, "Estrategia": 4, "Tiempo Real": 4 },
+                summary: "Prevención proactiva de incidentes mediante AIOps y aprendizaje automático.",
+                strength: "Su punto fuerte es la proactividad impulsada por IA. Detecta problemas 'desconocidos' antes de que se conviertan en incidentes, aprendiendo el comportamiento normal del sistema."
+            },
+            intellimagic: { 
+                name: "Z IntelliMagic Vision", 
+                comparison: { "Análisis": 4, "Alcance": 5, "Proactividad": 5, "Estrategia": 5, "Tiempo Real": 3 },
+                summary: "Analítica de rendimiento holística impulsada por IA para una visión unificada de la infraestructura.",
+                strength: "Combina visión estratégica y proactividad. Su fortaleza es aplicar inteligencia experta a los datos para calificar la salud del sistema e identificar riesgos ocultos."
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const navLinks = document.querySelectorAll('a[href^="#"]');
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const mobileMenu = document.getElementById('mobile-menu');
+
+            const handleNavigation = (e) => {
+                const href = e.currentTarget.getAttribute('href');
+                if (href && href.startsWith('#')) {
+                    e.preventDefault();
+                    window.location.hash = href;
+                    if (mobileMenu.offsetParent !== null) {
+                        mobileMenu.classList.add('hidden');
+                    }
+                }
+            };
+
+            navLinks.forEach(link => link.addEventListener('click', handleNavigation));
+            
+            window.addEventListener('hashchange', () => {
+                const pageId = window.location.hash ? window.location.hash.substring(1) : 'home';
+                showPage(pageId);
+            });
+
+            mobileMenuButton.addEventListener('click', () => mobileMenu.classList.toggle('hidden'));
+
+            const initialPageId = window.location.hash ? window.location.hash.substring(1) : 'home';
+            showPage(initialPageId);
+            
+            setupAccordions();
+            setupWorkflowTabs();
+            setupComparisonChart();
+        });
+
+        const showPage = (pageId) => {
+            const pages = document.querySelectorAll('.page');
+            pages.forEach(page => page.classList.remove('active'));
+            const targetPage = document.getElementById(`page-${pageId}`);
+            if (targetPage) {
+                targetPage.classList.add('active');
+                if (pageId === 'workflow') {
+                    observeWorkflowItems();
+                }
+            } else {
+                document.getElementById('page-home').classList.add('active');
+            }
+            updateActiveNav(pageId);
+            window.scrollTo(0, 0);
+        };
+
+        const updateActiveNav = (pageId) => {
+            const mainCategory = pageId.startsWith('tool-') ? 'tool' : pageId;
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+                const linkHref = link.getAttribute('href')?.substring(1);
+                if (linkHref === pageId) {
+                    link.classList.add('active');
+                }
+            });
+            const toolsButton = document.querySelector('.group > .nav-link');
+            if (mainCategory === 'tool') {
+                toolsButton.classList.add('active');
+            } else {
+                toolsButton.classList.remove('active');
+            }
+        };
+
+        const observeWorkflowItems = () => {
+            const items = document.querySelectorAll('.workflow-item');
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('is-visible');
+                    }
+                });
+            }, { threshold: 0.5 });
+
+            items.forEach(item => {
+                item.classList.remove('is-visible'); // Reset visibility on tab change
+                observer.observe(item);
+            });
+        };
+        
+        function setupAccordions() {
+            const accordionContainers = document.querySelectorAll('.accordion-container');
+            accordionContainers.forEach(container => {
+                const buttons = container.querySelectorAll('.accordion-button');
+                buttons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        const wasActive = button.classList.contains('active');
+                        // Close all accordions in this container
+                        container.querySelectorAll('.accordion-button').forEach(btn => btn.classList.remove('active'));
+                        // If it wasn't active, open it
+                        if (!wasActive) {
+                            button.classList.add('active');
+                        }
+                    });
+                });
+            });
+        }
+        
+        function setupWorkflowTabs() {
+            const tabs = document.querySelectorAll('.workflow-tab');
+            const scenarios = document.querySelectorAll('.workflow-scenario');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const scenarioNum = tab.dataset.scenario;
+                    
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+
+                    scenarios.forEach(s => s.classList.remove('active'));
+                    document.getElementById(`scenario-${scenarioNum}`).classList.add('active');
+                    
+                    observeWorkflowItems();
+                });
+            });
+        }
+
+        function setupComparisonChart() {
+            const selectors = [document.getElementById('comp-tool1'), document.getElementById('comp-tool2'), document.getElementById('comp-tool3')];
+            const detailsContainer = document.getElementById('comparison-details');
+            const ctx = document.getElementById('comparisonChart').getContext('2d');
+            
+            const options = Object.keys(toolsData).map(key => `<option value="${key}">${toolsData[key].name}</option>`).join('');
+            selectors.forEach(selector => {
+                selector.innerHTML = '<option value="">-- Seleccionar --</option>' + options;
+            });
+
+            selectors[0].value = 'apa';
+            selectors[1].value = 'omegamon';
+            selectors[2].value = 'intellimagic';
+
+            const chartLabels = ["Análisis Detallado", "Alcance Ambiental", "Proactividad", "Visión Estratégica", "Capacidad Tiempo Real"];
+            const chartColors = ['rgba(37, 99, 235, 0.4)', 'rgba(79, 70, 229, 0.4)', 'rgba(14, 165, 233, 0.4)'];
+            const borderColors = ['#2563eb', '#4f46e5', '#0ea5e9'];
+
+            const comparisonChart = new Chart(ctx, {
+                type: 'radar',
+                data: { labels: chartLabels, datasets: [] },
+                options: {
+                    maintainAspectRatio: false,
+                    responsive: true,
+                    scales: {
+                        r: {
+                            angleLines: { color: '#e2e8f0' },
+                            grid: { color: '#e2e8f0' },
+                            pointLabels: { font: { size: 12, weight: '600' }, color: '#334155' },
+                            ticks: { backdropColor: '#f8fafc', color: '#64748b', stepSize: 1, font: { weight: 'bold' } },
+                            min: 0, max: 5
+                        }
+                    },
+                    plugins: {
+                        legend: { position: 'top', labels: { color: '#1e293b', font: { size: 14, weight: '500' } } }
+                    }
+                }
+            });
+
+            function updateChart() {
+                const selectedTools = selectors.map(s => s.value).filter(v => v);
+                const datasets = [];
+                let detailsHtml = '<h3 class="text-2xl font-bold text-center mb-6">Análisis Conceptual</h3><div class="grid md:grid-cols-1 lg:grid-cols-3 gap-6">';
+                
+                selectedTools.forEach((toolId, index) => {
+                    const tool = toolsData[toolId];
+                    if (tool) {
+                        datasets.push({
+                            label: tool.name,
+                            data: Object.values(tool.comparison),
+                            backgroundColor: chartColors[index],
+                            borderColor: borderColors[index],
+                            borderWidth: 2.5,
+                            pointBackgroundColor: borderColors[index],
+                            pointBorderColor: '#fff',
+                            pointHoverBackgroundColor: '#fff',
+                            pointHoverBorderColor: borderColors[index],
+                            pointRadius: 4,
+                            pointHoverRadius: 7
+                        });
+
+                        detailsHtml += `
+                            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                                <h4 class="font-bold text-lg text-slate-800" style="color: ${borderColors[index]}">${tool.name}</h4>
+                                <p class="text-sm text-slate-600 mt-2 mb-3">${tool.summary}</p>
+                                <p class="text-sm text-slate-700 font-semibold"><strong>Punto Fuerte Clave:</strong> ${tool.strength}</p>
+                            </div>
+                        `;
+                    }
+                });
+                
+                detailsHtml += '</div>';
+                detailsContainer.innerHTML = selectedTools.length > 0 ? detailsHtml : '';
+                comparisonChart.data.datasets = datasets;
+                comparisonChart.update();
+            }
+
+            selectors.forEach(selector => selector.addEventListener('change', updateChart));
+            updateChart();
+        }
+    </script>
+</body>
+</html>
